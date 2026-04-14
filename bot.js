@@ -35,6 +35,32 @@ const cooldown = new Map();
 // ===== READY =====
 client.once(Events.ClientReady, async () => {
     console.log(`✅ Logged in as ${client.user.tag}`);
+
+    try {
+        const channel = await client.channels.fetch(CHANNEL_ID);
+
+        const embed = new EmbedBuilder()
+            .setTitle("🪖 MILITARY VERIFICATION SYSTEM")
+            .setDescription(
+                "🔐 Verify your Roblox account to unlock all features\n\nClick the button below."
+            )
+            .setColor(0x00b0ff);
+
+        const button = new ButtonBuilder()
+            .setCustomId("verify_btn")
+            .setLabel("START VERIFY")
+            .setStyle(ButtonStyle.Success);
+
+        const row = new ActionRowBuilder().addComponents(button);
+
+        await channel.send({
+            embeds: [embed],
+            components: [row]
+        });
+
+    } catch (err) {
+        console.log("Channel error:", err.message);
+    }
 });
 
 // ===== AUTO ROLE =====
@@ -43,7 +69,7 @@ client.on(Events.GuildMemberAdd, async (member) => {
         const role = member.guild.roles.cache.get(UNVERIFY_ROLE_ID);
         if (role) await member.roles.add(role);
     } catch (err) {
-        console.log("Join role error:", err.message);
+        console.log(err.message);
     }
 });
 
@@ -55,14 +81,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         if (cooldown.has(interaction.user.id)) {
             return interaction.reply({
-                content: "⏳ Please wait before verifying again.",
+                content: "⏳ Wait before trying again.",
                 ephemeral: true
             });
         }
 
         const modal = new ModalBuilder()
             .setCustomId("verify_modal")
-            .setTitle("🪖 Roblox Verification");
+            .setTitle("Roblox Verification");
 
         const input = new TextInputBuilder()
             .setCustomId("username")
@@ -86,7 +112,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         await interaction.deferReply({ ephemeral: true });
 
         try {
-            await interaction.editReply("🔍 Checking Roblox account...");
+            await interaction.editReply("🔍 Checking account...");
 
             // ===== ROBLOX USER =====
             const userRes = await fetch("https://users.roblox.com/v1/usernames/users", {
@@ -116,19 +142,25 @@ client.on(Events.InteractionCreate, async (interaction) => {
                 if (found) roleName = found.role.name;
             }
 
-            // ===== MEMBER FETCH (FORCE) =====
+            // ===== MEMBER =====
             const member = await interaction.guild.members.fetch({
                 user: interaction.user.id,
                 force: true
             });
 
-            // ===== DEBUG =====
             const botMember = interaction.guild.members.me;
 
-            console.log("====== DEBUG ======");
-            console.log("Bot highest:", botMember.roles.highest.position);
-            console.log("User highest:", member.roles.highest.position);
-            console.log("Manageable:", member.manageable);
+            // ===== PERMISSION CHECK =====
+            if (!botMember.permissions.has("ManageNicknames")) {
+                return interaction.editReply("❌ Bot missing **Manage Nicknames** permission.");
+            }
+
+            // ===== ROLE CHECK =====
+            if (botMember.roles.highest.position <= member.roles.highest.position) {
+                return interaction.editReply(
+                    "❌ Cannot change nickname.\n\n👉 Move bot role ABOVE your role."
+                );
+            }
 
             // ===== NICKNAME =====
             let nickname = roleName === "Guest"
@@ -137,17 +169,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
             if (nickname.length > 32) {
                 nickname = username.slice(0, 32);
-            }
-
-            // ===== FAIL CHECK =====
-            if (!member.manageable) {
-                return interaction.editReply(
-                    "❌ Cannot change nickname.\n\n" +
-                    "👉 Fix this:\n" +
-                    "- Move bot role ABOVE all roles\n" +
-                    "- Make sure bot has Manage Nicknames\n" +
-                    "- You are not server owner"
-                );
             }
 
             // ===== SET NICKNAME =====
@@ -166,7 +187,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
                 .setDescription(
                     `👤 Username: **${username}**\n` +
                     `🎖 Rank: **${roleName}**\n\n` +
-                    "Nickname updated successfully!"
+                    "Nickname updated!"
                 )
                 .setColor(0x00ff99);
 
@@ -174,7 +195,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         } catch (err) {
             console.error(err);
-            return interaction.editReply("❌ Error occurred.");
+            return interaction.editReply("❌ Error: " + err.message);
         }
     }
 });
