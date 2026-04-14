@@ -35,39 +35,9 @@ const cooldown = new Map();
 // ===== READY =====
 client.once(Events.ClientReady, async () => {
     console.log(`✅ Logged in as ${client.user.tag}`);
-
-    try {
-        const channel = await client.channels.fetch(CHANNEL_ID);
-
-        const embed = new EmbedBuilder()
-            .setTitle("🪖 MILITARY VERIFICATION SYSTEM")
-            .setDescription(
-                "```ansi\n[2;36mSecure Access Required[0m\n```\n" +
-                "🔐 Verify your Roblox account to unlock all features\n\n" +
-                "Click the button below to start verification."
-            )
-            .setColor(0x00b0ff)
-            .setFooter({ text: "Verification System • Secure Access" });
-
-        const button = new ButtonBuilder()
-            .setCustomId("verify_btn")
-            .setLabel("START VERIFY")
-            .setStyle(ButtonStyle.Success)
-            .setEmoji("🚀");
-
-        const row = new ActionRowBuilder().addComponents(button);
-
-        await channel.send({
-            embeds: [embed],
-            components: [row]
-        });
-
-    } catch (err) {
-        console.log("Channel send error:", err.message);
-    }
 });
 
-// ===== AUTO UNVERIFY ROLE =====
+// ===== AUTO ROLE =====
 client.on(Events.GuildMemberAdd, async (member) => {
     try {
         const role = member.guild.roles.cache.get(UNVERIFY_ROLE_ID);
@@ -77,7 +47,7 @@ client.on(Events.GuildMemberAdd, async (member) => {
     }
 });
 
-// ===== INTERACTIONS =====
+// ===== INTERACTION =====
 client.on(Events.InteractionCreate, async (interaction) => {
 
     // ===== BUTTON =====
@@ -98,17 +68,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
             .setCustomId("username")
             .setLabel("Roblox Username")
             .setStyle(TextInputStyle.Short)
-            .setPlaceholder("Enter your Roblox username")
             .setRequired(true);
 
-        modal.addComponents(
-            new ActionRowBuilder().addComponents(input)
-        );
+        modal.addComponents(new ActionRowBuilder().addComponents(input));
 
         return interaction.showModal(modal);
     }
 
-    // ===== MODAL SUBMIT =====
+    // ===== MODAL =====
     if (interaction.isModalSubmit() && interaction.customId === "verify_modal") {
 
         const username = interaction.fields.getTextInputValue("username");
@@ -121,7 +88,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         try {
             await interaction.editReply("🔍 Checking Roblox account...");
 
-            // ===== GET ROBLOX USER =====
+            // ===== ROBLOX USER =====
             const userRes = await fetch("https://users.roblox.com/v1/usernames/users", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -131,16 +98,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
             const userData = await userRes.json();
 
             if (!userData.data || userData.data.length === 0) {
-                return interaction.editReply("❌ Roblox username not found");
+                return interaction.editReply("❌ Username not found");
             }
 
             const userId = userData.data[0].id;
 
-            // ===== GET GROUP DATA =====
-            const groupRes = await fetch(
-                `https://groups.roblox.com/v1/users/${userId}/groups/roles`
-            );
-
+            // ===== GROUP =====
+            const groupRes = await fetch(`https://groups.roblox.com/v1/users/${userId}/groups/roles`);
             const groupData = await groupRes.json();
 
             let roleName = "Guest";
@@ -152,11 +116,19 @@ client.on(Events.InteractionCreate, async (interaction) => {
                 if (found) roleName = found.role.name;
             }
 
-            // ===== FETCH MEMBER (FIXED) =====
+            // ===== MEMBER FETCH (FORCE) =====
             const member = await interaction.guild.members.fetch({
                 user: interaction.user.id,
                 force: true
             });
+
+            // ===== DEBUG =====
+            const botMember = interaction.guild.members.me;
+
+            console.log("====== DEBUG ======");
+            console.log("Bot highest:", botMember.roles.highest.position);
+            console.log("User highest:", member.roles.highest.position);
+            console.log("Manageable:", member.manageable);
 
             // ===== NICKNAME =====
             let nickname = roleName === "Guest"
@@ -167,49 +139,42 @@ client.on(Events.InteractionCreate, async (interaction) => {
                 nickname = username.slice(0, 32);
             }
 
-            try {
-                if (member.manageable) {
-                    await member.setNickname(nickname);
-                    console.log(`✅ Nickname changed: ${nickname}`);
-                } else {
-                    console.log("❌ Cannot change nickname (role hierarchy)");
-                }
-            } catch (err) {
-                console.log("Nickname error:", err.message);
+            // ===== FAIL CHECK =====
+            if (!member.manageable) {
+                return interaction.editReply(
+                    "❌ Cannot change nickname.\n\n" +
+                    "👉 Fix this:\n" +
+                    "- Move bot role ABOVE all roles\n" +
+                    "- Make sure bot has Manage Nicknames\n" +
+                    "- You are not server owner"
+                );
             }
+
+            // ===== SET NICKNAME =====
+            await member.setNickname(nickname);
 
             // ===== ROLES =====
             const verifyRole = interaction.guild.roles.cache.get(VERIFY_ROLE_ID);
             const unverifyRole = interaction.guild.roles.cache.get(UNVERIFY_ROLE_ID);
 
-            if (verifyRole && member.manageable) {
-                await member.roles.add(verifyRole);
-            }
+            if (verifyRole) await member.roles.add(verifyRole);
+            if (unverifyRole) await member.roles.remove(unverifyRole);
 
-            if (unverifyRole && member.manageable) {
-                await member.roles.remove(unverifyRole);
-            }
-
-            // ===== SUCCESS EMBED =====
-            const success = new EmbedBuilder()
-                .setTitle("✅ VERIFIED SUCCESSFULLY")
+            // ===== SUCCESS =====
+            const embed = new EmbedBuilder()
+                .setTitle("✅ VERIFIED")
                 .setDescription(
-                    "```ansi\n[2;32mACCESS GRANTED[0m\n```\n" +
                     `👤 Username: **${username}**\n` +
                     `🎖 Rank: **${roleName}**\n\n` +
-                    "Welcome to the server!"
+                    "Nickname updated successfully!"
                 )
-                .setColor(0x00ff99)
-                .setFooter({ text: "System Verified ✔" });
+                .setColor(0x00ff99);
 
-            return interaction.editReply({
-                content: "",
-                embeds: [success]
-            });
+            return interaction.editReply({ embeds: [embed] });
 
         } catch (err) {
             console.error(err);
-            return interaction.editReply("❌ Verification failed. Try again.");
+            return interaction.editReply("❌ Error occurred.");
         }
     }
 });
