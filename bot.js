@@ -1,21 +1,5 @@
 require("dotenv").config();
 
-// ===== KEEP ALIVE (FOR HOSTING) =====
-const express = require("express");
-const app = express();
-
-app.get("/", (req, res) => {
-    res.send("Bot is running ✅");
-});
-
-app.listen(3000, () => {
-    console.log("🌐 Web server running");
-});
-
-// ===== FETCH FIX =====
-const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
-
-// ===== DISCORD =====
 const {
     Client,
     GatewayIntentBits,
@@ -45,42 +29,37 @@ const UNVERIFY_ROLE_ID = process.env.UNVERIFY_ROLE_ID;
 
 const GROUP_ID = 255794288;
 
-// ===== COOLDOWN =====
+// ===== SIMPLE COOLDOWN =====
 const cooldown = new Map();
 
 // ===== READY =====
 client.once(Events.ClientReady, async () => {
     console.log(`✅ Logged in as ${client.user.tag}`);
 
-    try {
-        const channel = await client.channels.fetch(CHANNEL_ID);
+    const channel = await client.channels.fetch(CHANNEL_ID);
 
-        const embed = new EmbedBuilder()
-            .setTitle("🪖 MILITARY VERIFICATION SYSTEM")
-            .setDescription(
-                "```ansi\n[2;36mSecure Access Required[0m\n```\n" +
-                "🔐 Verify your Roblox account to unlock all features\n\n" +
-                "Click below to begin."
-            )
-            .setColor(0x00b0ff)
-            .setFooter({ text: "Verification System • Secure Access" });
+    const embed = new EmbedBuilder()
+        .setTitle("🪖 MILITARY VERIFICATION SYSTEM")
+        .setDescription(
+            "```ansi\n[2;36mSecure Access Required[0m\n```\n" +
+            "🔐 Verify your Roblox account to unlock all features\n\n" +
+            "Click the button below to start verification."
+        )
+        .setColor(0x00b0ff)
+        .setFooter({ text: "Verification System • Secure Access" });
 
-        const button = new ButtonBuilder()
-            .setCustomId("verify_btn")
-            .setLabel("START VERIFY")
-            .setStyle(ButtonStyle.Success)
-            .setEmoji("🚀");
+    const button = new ButtonBuilder()
+        .setCustomId("verify_btn")
+        .setLabel("START VERIFY")
+        .setStyle(ButtonStyle.Success)
+        .setEmoji("🚀");
 
-        const row = new ActionRowBuilder().addComponents(button);
+    const row = new ActionRowBuilder().addComponents(button);
 
-        await channel.send({
-            embeds: [embed],
-            components: [row]
-        });
-
-    } catch (err) {
-        console.log("❌ Channel error:", err.message);
-    }
+    await channel.send({
+        embeds: [embed],
+        components: [row]
+    });
 });
 
 // ===== JOIN ROLE =====
@@ -135,6 +114,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         await interaction.deferReply({ ephemeral: true });
 
         try {
+            // ===== LOADING UI =====
             await interaction.editReply("🔍 Checking Roblox account...");
 
             // ===== ROBLOX USER =====
@@ -171,14 +151,16 @@ client.on(Events.InteractionCreate, async (interaction) => {
             // ===== MEMBER =====
             const member = await interaction.guild.members.fetch(interaction.user.id);
 
-            // ===== NICKNAME =====
+            // ===== COOL NICKNAME STYLE =====
             let nickname = `${username} | ${roleName}`;
+
             if (roleName !== "Guest") {
                 nickname = `${username} | ${roleName}`;
             }
 
+            // LIMIT SAFE
             if (nickname.length > 32) {
-                nickname = `✪ ${username}`;
+                nickname = `${username} | ${roleName}`;
                 if (nickname.length > 32) {
                     nickname = username.slice(0, 32);
                 }
@@ -197,7 +179,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
             if (verifyRole) await member.roles.add(verifyRole);
             if (unverifyRole) await member.roles.remove(unverifyRole);
 
-            // ===== SUCCESS =====
+            // ===== SUCCESS EMBED =====
             const success = new EmbedBuilder()
                 .setTitle("✅ VERIFIED SUCCESSFULLY")
                 .setDescription(
@@ -209,10 +191,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
                 .setColor(0x00ff99)
                 .setFooter({ text: "System Verified ✔" });
 
-            return interaction.editReply({ embeds: [success] });
+            return interaction.editReply({ content: "", embeds: [success] });
 
         } catch (err) {
-            console.error("❌ ERROR:", err);
+            console.error(err);
             return interaction.editReply("❌ Verification failed. Try again.");
         }
     }
